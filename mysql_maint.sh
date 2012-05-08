@@ -107,6 +107,13 @@ IGNORE_BACKUP_DATABASES="information_schema mysql"
 ONLY_BACKUP_DATABASES=""
 ONLY_MAINTAIN_DATABASES=""
 
+# You may include or exclude certain
+# tables from a being maintained. 
+# Does not work on backups and must
+# a regular expression
+INCLUCED_REGEX=
+EXCLUDED_REGEX=
+
 # Enable logging ?
 LOG=yes
 LOG_FILE_BACKUP_NAME="backup.log"
@@ -321,6 +328,10 @@ print_usage()
 	echo "-S [socket] : MySQL socket (default: no socket defined)"
 	echo "-d [directory] : Backups folder (default: ${HOME}/backup/mysql)"
 	echo "-n [name] : Backups folder for this server (defaults to server name)"
+	echo '-x [regex] : Regex of tables to exclude. Only works when performing maintenance.'
+	echo '           : e.g run maintenance tables that end with _archive => -x "_archive$"'
+	echo '-i [regex] : Regex of tables to include. Only works when performing maintenance.'
+	echo '           : e.g maintain tables that start with a thru m => -i "^[a-m]"'
 	echo "-l : Keep a copy of the latest backup for each database (default: yes)"
 }
 
@@ -332,7 +343,7 @@ print_version()
 #########################################
 # Part 3 : Process command-line options #
 #########################################
-while getopts "bmhvlHS:u:p:P:d:n:c" option
+while getopts "bmhvlHS:u:p:P:d:n:c:x:i:" option
 do
 	case $option in
 		v)	# Version
@@ -372,6 +383,13 @@ do
 			;;
 		n)	# Server folder name
 			BACKUP_HOST_NAME=$OPTARG
+			;;
+		i)	# Regex of  tables to include when preforming maintenance
+			INCLUCED_REGEX=$OPTARG
+			;;
+		x)	# Regex of tables to exclude when preforming maintenance
+
+			EXCLUDED_REGEX=$OPTARG
 			;;
 		l)	# Keep a copy of the latest backup
 			SAVE_LATEST=yes
@@ -642,6 +660,24 @@ quote_identifier()
 	echo '`'$1'`'
 }
 
+match_included_or_excluded()
+{
+  local table=$1
+  if [ -n "$INCLUCED_REGEX" ]; then
+    if [[ ! $table =~ $INCLUCED_REGEX  ]]; then 
+      echo 0
+      break
+    fi
+  fi
+  if [ -n "$EXCLUDED_REGEX" ]; then
+    if [[ $table =~ $EXCLUDED_REGEX  ]]; then
+      echo 0
+      break
+    fi
+  fi
+  echo 1
+}
+
 ####################################
 # Starts maintenance on a database #
 # $1 : database name               #
@@ -651,6 +687,9 @@ db_maintenance()
 	local database=$1
 	log_m "Maintenance started on database ${database}"
 	for i in `show_tables $database`; do
+    if [ `match_included_or_excluded $i` -eq 0 ]; then continue; fi
+    echo "Checking table ${i}..."
+    local log_message="Checking table ${i}..."
 			local quotedTableName=`quote_identifier $i`
 			local msg_text=`${MYSQL} -e "CHECK TABLE $quotedTableName" -E $1|${GREP} Msg_text |${CUT} -d' ' -f2`
 			echo "	$i : ${msg_type} ...${msg_text}"
