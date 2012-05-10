@@ -321,6 +321,7 @@ print_usage()
 	echo ""
 	echo "-b : Perform a backup"
 	echo "-m : Perform maintenance"
+	echo "-D [databases] : only maintain theses databases"
 	echo "-H [host] : IP address or DNS name of the MySQL server (default: 127.0.0.1)"
 	echo "-u [login] : Login (default: root)"
 	echo "-p [password] : Password (default: admin)"
@@ -343,7 +344,7 @@ print_version()
 #########################################
 # Part 3 : Process command-line options #
 #########################################
-while getopts "bmhvlHS:u:p:P:d:n:c:x:i:" option
+while getopts "bmhvlHS:u:p:P:d:n:c:x:i:D:" option
 do
 	case $option in
 		v)	# Version
@@ -388,8 +389,10 @@ do
 			INCLUCED_REGEX=$OPTARG
 			;;
 		x)	# Regex of tables to exclude when preforming maintenance
-
 			EXCLUDED_REGEX=$OPTARG
+			;;
+		D)	# Only maintain these databases. Comma separated. Double quote if more than one "db1 db2"
+			ONLY_MAINTAIN_DATABASES=$OPTARG
 			;;
 		l)	# Keep a copy of the latest backup
 			SAVE_LATEST=yes
