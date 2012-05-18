@@ -68,6 +68,9 @@ BACKUP_HOST_NAME=""
 # in $BACKUP_HOST_NAME/<db-name> ?
 SAVE_LATEST=yes
 
+# Only run CHECK TABLES when doing maintenance
+ONLY_CHECK=no
+
 # Should this copy be a symlink
 # instead of a hard copy ?
 LINK_LATEST=yes
@@ -344,7 +347,7 @@ print_version()
 #########################################
 # Part 3 : Process command-line options #
 #########################################
-while getopts "bmhvlHS:u:p:P:d:n:c:x:i:D:" option
+while getopts "bmhkvlHS:u:p:P:d:n:c:x:i:D:" option
 do
 	case $option in
 		v)	# Version
@@ -384,6 +387,9 @@ do
 			;;
 		n)	# Server folder name
 			BACKUP_HOST_NAME=$OPTARG
+			;;
+		k)	# Don't repair; just run CHECK TABLES
+			ONLY_CHECK=yes
 			;;
 		i)	# Regex of  tables to include when preforming maintenance
 			INCLUCED_REGEX=$OPTARG
@@ -696,7 +702,7 @@ db_maintenance()
 			local quotedTableName=`quote_identifier $i`
 			local msg_text=`${MYSQL} -e "CHECK TABLE $quotedTableName" -E $1|${GREP} Msg_text |${CUT} -d' ' -f2`
 			echo "	$i : ${msg_type} ...${msg_text}"
-			local log_message="Checking table ${i}..."
+		if [ $ONLY_CHECK = "yes" ]; then continue; fi
 			if [ "$msg_text" != "OK" ]; then
 				log_message="${log_message} ${msg_text}"
 				echo "		Repairing table $i"
