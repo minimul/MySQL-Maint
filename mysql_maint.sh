@@ -697,25 +697,20 @@ db_maintenance()
 	log_m "Maintenance started on database ${database}"
 	for i in `show_tables $database`; do
     if [ `match_included_or_excluded $i` -eq 0 ]; then continue; fi
+    check_parameters
     echo "Checking table ${i}..."
     local log_message="Checking table ${i}..."
 			local quotedTableName=`quote_identifier $i`
-			local msg_text=`${MYSQL} -e "CHECK TABLE $quotedTableName" -E $1|${GREP} Msg_text |${CUT} -d' ' -f2`
-			echo "	$i : ${msg_type} ...${msg_text}"
+    local msg_text=`${MYSQL} -e "CHECK TABLE $quotedTableName" -E $1`
+    local msg_text_short=`echo "$msg_txt"|${GREP} Msg_text |${CUT} -d' ' -f2`
+    echo "${msg_text}"
 		if [ $ONLY_CHECK = "yes" ]; then continue; fi
-			if [ "$msg_text" != "OK" ]; then
-				log_message="${log_message} ${msg_text}"
-				echo "		Repairing table $i"
-				${MYSQL} -e "REPAIR TABLE $quotedTableName EXTENDED" $1 &> ${TRASH}
-			else
-				log_message="${log_message} OK"
-			fi;
-			log_m "${log_message}"
-			log_m "Optimizing table $i"
-			${MYSQL} -e "OPTIMIZE TABLE $quotedTableName" $1 > ${TRASH}
+    log_m "${log_message}"
+    log_m "Optimizing table $i"
+    ${MYSQL} -e "OPTIMIZE TABLE $quotedTableName" $1 > ${TRASH}
 
-			log_m "Analyzing table $i"
-			${MYSQL} -e "ANALYZE TABLE $quotedTableName" $1 > ${TRASH}
+    log_m "Analyzing table $i"
+    ${MYSQL} -e "ANALYZE TABLE $quotedTableName" $1 > ${TRASH}
 	done
 	log_m "Maintenance complete on database ${database}"
 }
