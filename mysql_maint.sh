@@ -71,6 +71,12 @@ SAVE_LATEST=yes
 # Only run CHECK TABLES when doing maintenance
 ONLY_CHECK=no
 
+# Only run REPAIR TABLES when doing maintenance
+REPAIR_MODE=no
+
+# Only run OPTIMIZE and ANALYZE TABLES when doing maintenance
+OPTIMIZE_MODE=no
+
 # Should this copy be a symlink
 # instead of a hard copy ?
 LINK_LATEST=yes
@@ -347,7 +353,7 @@ print_version()
 #########################################
 # Part 3 : Process command-line options #
 #########################################
-while getopts "bmhkvlHS:u:p:P:d:n:c:x:i:D:" option
+while getopts "bmhkvlOHRS:u:p:P:d:n:c:x:i:D:" option
 do
 	case $option in
 		v)	# Version
@@ -388,7 +394,7 @@ do
 		n)	# Server folder name
 			BACKUP_HOST_NAME=$OPTARG
 			;;
-		k)	# Don't repair; just run CHECK TABLES
+		k)	# Don't optimize or analyze; just run CHECK TABLES unless -O is included then optimize and analyze will run.
 			ONLY_CHECK=yes
 			;;
 		i)	# Regex of  tables to include when preforming maintenance
@@ -399,6 +405,12 @@ do
 			;;
 		D)	# Only maintain these databases. Comma separated. Double quote if more than one "db1 db2"
 			ONLY_MAINTAIN_DATABASES=$OPTARG
+			;;
+		R)	# Only run repair tables when in maintenance mode. Will not run check tables, optimize, or analyze.
+			REPAIR_MODE=yes
+			;;
+		O)	# Only run optimize and analyze tables when in maintenance mode. 
+			OPTIMIZE_MODE=yes
 			;;
 		l)	# Keep a copy of the latest backup
 			SAVE_LATEST=yes
@@ -694,23 +706,38 @@ match_included_or_excluded()
 db_maintenance()
 {
 	local database=$1
+  local output=""
 	log_m "Maintenance started on database ${database}"
 	for i in `show_tables $database`; do
     if [ `match_included_or_excluded $i` -eq 0 ]; then continue; fi
     check_parameters
+    local quotedTableName=`quote_identifier $i`
+    if [ $REPAIR_MODE = "yes" ]; then
+      echo "Repairing table ${i}..."
+      log_m "Repairing table $i"
+      output=`${MYSQL} -e "REPAIR TABLE $quotedTableName EXTENDED" -E $1`
+      echo "${output}"
+      continue 
+    fi
+    if [ $ONLY_CHECK = "yes" ]; then
     echo "Checking table ${i}..."
     local log_message="Checking table ${i}..."
-			local quotedTableName=`quote_identifier $i`
     local msg_text=`${MYSQL} -e "CHECK TABLE $quotedTableName" -E $1`
-    local msg_text_short=`echo "$msg_txt"|${GREP} Msg_text |${CUT} -d' ' -f2`
     echo "${msg_text}"
-		if [ $ONLY_CHECK = "yes" ]; then continue; fi
     log_m "${log_message}"
+      if [ $OPTIMIZE_MODE = "no" ]; then continue; fi
+    fi
+    if [ $OPTIMIZE_MODE = "yes" ]; then
+      echo "Optimizing table $i"
     log_m "Optimizing table $i"
-    ${MYSQL} -e "OPTIMIZE TABLE $quotedTableName" $1 > ${TRASH}
+      output=`${MYSQL} -e "OPTIMIZE TABLE $quotedTableName" -E $1`
+      echo "${output}"
 
+      echo "Analyzing table $i"
     log_m "Analyzing table $i"
-    ${MYSQL} -e "ANALYZE TABLE $quotedTableName" $1 > ${TRASH}
+      output=`${MYSQL} -e "ANALYZE TABLE $quotedTableName" -E $1`
+      echo "${output}"
+    fi
 	done
 	log_m "Maintenance complete on database ${database}"
 }
